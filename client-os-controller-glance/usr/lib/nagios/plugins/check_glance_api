@@ -1,0 +1,117 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+#
+# Keystone monitoring script for Nagios
+#
+# Copyright © 2012-2014 eNovance <licensing@enovance.com>
+#
+# Authors:
+#   Julien Danjou <julien@danjou.info>
+#   Sofer Athlan-Guyot <chem@sathlan.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Requirments: python-keystoneclient, python-argparse, python
+
+import sys
+import argparse
+import requests
+
+STATE_OK = 0
+STATE_WARNING = 1
+STATE_CRITICAL = 2
+STATE_UNKNOWN = 3
+
+
+parser = argparse.ArgumentParser(description='Check an OpenStack Keystone server.')
+parser.add_argument('--auth_url', metavar='URL', type=str,
+                    required=True,
+                    help='Keystone URL')
+parser.add_argument('--username', metavar='username', type=str,
+                    required=True,
+                    help='username to use for authentication')
+parser.add_argument('--password', metavar='password', type=str,
+                    required=True,
+                    help='password to use for authentication')
+parser.add_argument('--tenant', metavar='tenant', type=str,
+                    required=True,
+                    help='tenant name to use for authentication')
+parser.add_argument('--region_name', metavar='region_name', type=str,
+                    help='Region to select for authentication')
+parser.add_argument('--no-admin', action='store_true', default=False,
+                    help='Don\'t perform admin tests, useful if user is not admin')
+parser.add_argument('--revoke-token', action='store_true', default=False,
+                    help='Revoke created token after usage')
+parser.add_argument('services', metavar='SERVICE', type=str, nargs='*',
+                    help='services to check for')
+parser.add_argument('--req_count', metavar='numberImages', type=str,
+                    required=False,
+                    help='minimum number of images in glance')
+args = parser.parse_args()
+
+headers = {'content-type': 'application/json'}
+
+auth_token = None
+
+glance_url = None 
+
+try:
+
+    auth_request = '{"auth":{"tenantName": "' + args.tenant + '", "passwordCredentials": {"username": "' +  args.username + '", "password": "' + args.password + '"}}}'
+
+    auth_response = requests.post(args.auth_url + '/tokens', data=auth_request, headers=headers).json();
+
+    if not auth_response['access']['token']['id']:
+        raise Exception("Authentication failed. Failed to get an auth token.")
+
+    auth_token = auth_response['access']['token']['id']
+
+    services = auth_response['access']['serviceCatalog']
+
+    for service in services:
+    	if service['type'] == 'image':
+    		glance_url = service['endpoints'][0]['publicURL']
+    
+    if glance_url is None:
+    	raise Exception("Authentication succeeded but unable to find image service")
+
+except Exception as e:
+    print "Failure - Athentication Failure" 
+    sys.exit(STATE_CRITICAL)
+
+headers['X-Auth-Token'] = auth_token  
+
+
+try:
+   glance_images_list_response = requests.get(glance_url + '/images', headers=headers).json()
+   image_count = 0
+   for image in glance_images_list_response['images']:
+   	image_count += 1
+   required_image_count = int(args.req_count)
+   if args.req_count and image_count < required_image_count:
+   	print "Failed - %d images found less than required %d" % (image_count, required_image_count) 
+   	sys.exit(STATE_CRITICAL)
+ 
+   if args.req_count: 
+   	print "Success - Retrieved %d images, required %d" % (image_count, required_image_count)
+   else:
+   	print "Success - Retrieved %d images" % (image_count)
+
+
+except Exception as e:
+   print e
+   print 'Failure - Failed to retrieve images' 
+   sys.exit(STATE_CRITICAL)
+
+sys.exit(STATE_OK)
