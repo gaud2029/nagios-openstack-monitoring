@@ -4,9 +4,11 @@ A sample Nagios deployment: http://108.244.166.6/nagios3/
 username: nagiosadmin
 password: nagiosadmin
 
-Server Requirements: nagios3
+- Overall Requirements:
+	- Server: nagios3
+	- Client Node: nagios-nrpe-server
+	- API Checks: Openstack tenant with username and password. In these scripts a tenant: cookbook with username: admin and password: openstack has been used.
 
-Monitoring Client Node requirements: nagios-nrpe-server
 
 - Keystone:
 	- Nagios Server:
