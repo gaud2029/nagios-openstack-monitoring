@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 #
-# Glance API monitoring script for Nagios
+# Nova API monitoring script for Nagios
 #
 # Authors:
 #   Rakesh Patnaik <rakesh.patnaik9@gmail.com>
@@ -31,7 +31,7 @@ STATE_CRITICAL = 2
 STATE_UNKNOWN = 3
 
 
-parser = argparse.ArgumentParser(description='Check OpenStack Glance API for availability.')
+parser = argparse.ArgumentParser(description='Check OpenStack Nova API availability.')
 parser.add_argument('--auth_url', metavar='URL', type=str,
                     required=True,
                     help='Keystone URL')
@@ -44,16 +44,16 @@ parser.add_argument('--password', metavar='password', type=str,
 parser.add_argument('--tenant', metavar='tenant', type=str,
                     required=True,
                     help='tenant name to use for authentication')
-parser.add_argument('--req_count', metavar='numberImages', type=str,
+parser.add_argument('--req_count', metavar='numberFlavors', type=str,
                     required=False,
-                    help='minimum number of images in glance')
+                    help='minimum number of instance flavors avialable')
 args = parser.parse_args()
 
 headers = {'content-type': 'application/json'}
 
 auth_token = None
 
-glance_url = None 
+nova_url = None 
 
 try:
 
@@ -69,10 +69,10 @@ try:
     services = auth_response['access']['serviceCatalog']
 
     for service in services:
-    	if service['type'] == 'image':
-    		glance_url = service['endpoints'][0]['publicURL']
+    	if service['type'] == 'compute':
+    		nova_url = service['endpoints'][0]['publicURL']
     
-    if glance_url is None:
+    if nova_url is None:
     	raise Exception("Authentication succeeded but unable to find image service")
 
 except Exception as e:
@@ -81,26 +81,28 @@ except Exception as e:
 
 headers['X-Auth-Token'] = auth_token  
 
+if not args.req_count:
+    args.req_count = 1
 
 try:
-   glance_images_list_response = requests.get(glance_url + '/images', headers=headers).json()
-   image_count = 0
-   for image in glance_images_list_response['images']:
-   	image_count += 1
-   required_image_count = int(args.req_count)
-   if args.req_count and image_count < required_image_count:
-   	print "Failed - %d images found less than required %d" % (image_count, required_image_count) 
+   nova_flavor_list_response = requests.get(nova_url + '/flavors', headers=headers).json()
+   flavor_count = 0
+   for flavor in nova_flavor_list_response['flavors']:
+   	flavor_count += 1
+   required_flavor_count = int(args.req_count)
+   if args.req_count and flavor_count < required_flavor_count:
+   	print "Failed - %d flavors found less than required %d" % (flavor_count, required_flavor_count) 
    	sys.exit(STATE_CRITICAL)
  
    if args.req_count: 
-   	print "Success - Retrieved %d images, required %d" % (image_count, required_image_count)
+   	print "Success - Retrieved %d flavors, required %d" % (flavor_count, required_flavor_count)
    else:
-   	print "Success - Retrieved %d images" % (image_count)
+   	print "Success - Retrieved %d flavors" % (flavor_count)
 
 
 except Exception as e:
    print e
-   print 'Failure - Failed to retrieve images' 
+   print 'Failure - Failed to retrieve flavors' 
    sys.exit(STATE_CRITICAL)
 
 sys.exit(STATE_OK)

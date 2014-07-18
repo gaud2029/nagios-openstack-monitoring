@@ -69,13 +69,19 @@ password: nagiosadmin
 	- Compute Node:
 		- Nagios Server:
 			- Host config: nagios-server/etc/nagios3/conf.d/openstack_node_nova_host.cfg
-			- Service config: nagios-server/etc/nagios3/conf.d/openstack_node_nova_service.cfg
+			- Service config: 
+				- nagios-server/etc/nagios3/conf.d/openstack_node_nova_service.cfg
+				- nagios-server/etc/nagios3/conf.d/openstack_node_kvm_service.cfg
 		- Nagios Agent:
 			- NRPE plugins: 
 				- client-os-controller-nova/usr/lib/nagios/plugins/check_nova-api
 				- client-os-controller-nova/usr/lib/nagios/plugins/check_service.sh
+				- client-os-controller-nova/usr/lib/nagios/plugins/check_kvm_cpustats
+				- client-os-controller-nova/usr/lib/nagios/plugins/check_kvm_instance
+				- client-os-controller-nova/usr/lib/nagios/plugins/check_kvm_memstats
 			- NRPE commands:
 				- client-os-controller-nova/etc/nagios/nrpe.d/openstack_nova_node_checks.cfg
+				- client-os-controller-nova/etc/nagios/nrpe.d/openstack_kvm_checks.cfg
 	
 - Swift:
 	- Object Store Controller:
