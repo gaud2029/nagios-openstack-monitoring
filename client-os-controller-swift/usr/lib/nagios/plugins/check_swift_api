@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 #
-# Glance API monitoring script for Nagios
+# Swift API monitoring script for Nagios
 #
 # Authors:
 #   Rakesh Patnaik <rakesh.patnaik9@gmail.com>
@@ -31,7 +31,7 @@ STATE_CRITICAL = 2
 STATE_UNKNOWN = 3
 
 
-parser = argparse.ArgumentParser(description='Check OpenStack Glance API for availability.')
+parser = argparse.ArgumentParser(description='Check OpenStack Swift API availability.')
 parser.add_argument('--auth_url', metavar='URL', type=str,
                     required=True,
                     help='Keystone URL')
@@ -44,16 +44,16 @@ parser.add_argument('--password', metavar='password', type=str,
 parser.add_argument('--tenant', metavar='tenant', type=str,
                     required=True,
                     help='tenant name to use for authentication')
-parser.add_argument('--req_count', metavar='numberImages', type=str,
+parser.add_argument('--container_name', metavar='containerName', type=str,
                     required=False,
-                    help='minimum number of images in glance')
+                    help='name of the container to create and delete')
 args = parser.parse_args()
 
 headers = {'content-type': 'application/json'}
 
 auth_token = None
 
-glance_url = None 
+swift_url = None 
 
 try:
 
@@ -69,11 +69,11 @@ try:
     services = auth_response['access']['serviceCatalog']
 
     for service in services:
-    	if service['type'] == 'image':
-    		glance_url = service['endpoints'][0]['publicURL']
+    	if service['type'] == 'object-store':
+    		swift_url = service['endpoints'][0]['publicURL']
     
-    if glance_url is None:
-    	raise Exception("Authentication succeeded but unable to find image service")
+    if swift_url is None:
+    	raise Exception("Authentication succeeded but unable to find object-store service")
 
 except Exception as e:
     print 'WARNING: Athentication failed for tenant %s and user %s' % (args.tenant, args.username) 
@@ -81,24 +81,21 @@ except Exception as e:
 
 headers['X-Auth-Token'] = auth_token  
 
+if not args.container_name:
+   args.container_name='test'
+
 try:
-   glance_images_list_response = requests.get(glance_url + '/images', headers=headers).json()
-   image_count = 0
-   for image in glance_images_list_response['images']:
-   	image_count += 1
-   if args.req_count and image_count < int(args.req_count):
-   	print "CRITICAL: %d images found less than required %d" % (image_count, int(args.req_count)) 
-   	sys.exit(STATE_CRITICAL)
- 
-   if args.req_count: 
-   	print "OK: Retrieved %d images, required %d" % (image_count, int(args.req_count))
-   else:
-   	print "OK: Retrieved %d images" % (image_count)
-
-
+   get_container_response = requests.get(swift_url + '/' + args.container_name + '?limit=1', headers=headers)
+   if get_container_response.status_code == 404:
+     requests.put(swift_url + '/' + args.container_name, headers=headers)
+     get_container_response = requests.get(swift_url + '/' + args.container_name + '?limit=1', headers=headers)
+   if not (get_container_response.status_code == 200 or get_container_response.status_code == 204):
+     print 'CRITICAL: Get container failed with error code: %d' % (get_container_response.status_code)
+     sys.exit(STATE_CRITICAL)
 except Exception as e:
    print e
-   print 'CRITICAL: Failed to retrieve images for tenant %s and user %s' % (args.tenant, args.username) 
+   print 'CRITICAL: Failed to get container for tenant %s and user %s' % (args.tenant, args.username) 
    sys.exit(STATE_CRITICAL)
 
+print 'OK: Listed container %s' % (args.container_name)
 sys.exit(STATE_OK)

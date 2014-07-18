@@ -4,7 +4,7 @@
 # Nova API monitoring script for Nagios
 #
 # Authors:
-#   Rakesh Patnaik <rakesh.patnaik9@gmail.com>
+#   Rakesh Patnaik <rakesh.patnaik@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -76,33 +76,28 @@ try:
     	raise Exception("Authentication succeeded but unable to find image service")
 
 except Exception as e:
-    print "Failure - Athentication Failure" 
-    sys.exit(STATE_CRITICAL)
+    print 'WARNING: Athentication failed for tenant %s and user %s' % (args.tenant, args.username) 
+    sys.exit(STATE_WARNING)
 
 headers['X-Auth-Token'] = auth_token  
-
-if not args.req_count:
-    args.req_count = 1
 
 try:
    nova_flavor_list_response = requests.get(nova_url + '/flavors', headers=headers).json()
    flavor_count = 0
    for flavor in nova_flavor_list_response['flavors']:
    	flavor_count += 1
-   required_flavor_count = int(args.req_count)
-   if args.req_count and flavor_count < required_flavor_count:
-   	print "Failed - %d flavors found less than required %d" % (flavor_count, required_flavor_count) 
+   if args.req_count and flavor_count < int(args.req_count):
+   	print "CRITICAL: %d flavors found less than required %d" % (flavor_count, int(args.req_count)) 
    	sys.exit(STATE_CRITICAL)
  
    if args.req_count: 
-   	print "Success - Retrieved %d flavors, required %d" % (flavor_count, required_flavor_count)
+   	print "OK: Retrieved %d flavors, required %d" % (flavor_count, int(args.req_count))
    else:
-   	print "Success - Retrieved %d flavors" % (flavor_count)
+   	print "OK: Retrieved %d flavors" % (flavor_count)
 
 
 except Exception as e:
-   print e
-   print 'Failure - Failed to retrieve flavors' 
+   print 'CRITICAL: Failed to retrieve flavors for tenant %s and user %s' % (args.tenant, args.username) 
    sys.exit(STATE_CRITICAL)
 
 sys.exit(STATE_OK)

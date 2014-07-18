@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 #
-# Glance API monitoring script for Nagios
+# Cinder API monitoring script for Nagios
 #
 # Authors:
-#   Rakesh Patnaik <rakesh.patnaik9@gmail.com>
+#   Rakesh Patnaik <rakesh.patnaik@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ STATE_CRITICAL = 2
 STATE_UNKNOWN = 3
 
 
-parser = argparse.ArgumentParser(description='Check OpenStack Glance API for availability.')
+parser = argparse.ArgumentParser(description='Check OpenStack Cinder API availability.')
 parser.add_argument('--auth_url', metavar='URL', type=str,
                     required=True,
                     help='Keystone URL')
@@ -44,16 +44,15 @@ parser.add_argument('--password', metavar='password', type=str,
 parser.add_argument('--tenant', metavar='tenant', type=str,
                     required=True,
                     help='tenant name to use for authentication')
-parser.add_argument('--req_count', metavar='numberImages', type=str,
-                    required=False,
-                    help='minimum number of images in glance')
 args = parser.parse_args()
 
 headers = {'content-type': 'application/json'}
 
 auth_token = None
 
-glance_url = None 
+cinder_url = None 
+
+tenant_id = None
 
 try:
 
@@ -66,14 +65,16 @@ try:
 
     auth_token = auth_response['access']['token']['id']
 
+    tenant_id = auth_response['access']['token']['tenant']['id']
+	
     services = auth_response['access']['serviceCatalog']
 
     for service in services:
-    	if service['type'] == 'image':
-    		glance_url = service['endpoints'][0]['publicURL']
+    	if service['type'] == 'volume':
+    		cinder_url = service['endpoints'][0]['publicURL']
     
-    if glance_url is None:
-    	raise Exception("Authentication succeeded but unable to find image service")
+    if cinder_url is None:
+    	raise Exception("Authentication succeeded but unable to find cinder service")
 
 except Exception as e:
     print 'WARNING: Athentication failed for tenant %s and user %s' % (args.tenant, args.username) 
@@ -82,23 +83,17 @@ except Exception as e:
 headers['X-Auth-Token'] = auth_token  
 
 try:
-   glance_images_list_response = requests.get(glance_url + '/images', headers=headers).json()
-   image_count = 0
-   for image in glance_images_list_response['images']:
-   	image_count += 1
-   if args.req_count and image_count < int(args.req_count):
-   	print "CRITICAL: %d images found less than required %d" % (image_count, int(args.req_count)) 
+   cinder_quota_set_response = requests.get(cinder_url + '/os-quota-sets/' + tenant_id, headers=headers).json()
+   quota_set_id  = cinder_quota_set_response['quota_set']['id']
+   number_of_volumes = cinder_quota_set_response['quota_set']['volumes']
+   if not quota_set_id:
+   	print 'CRITICAL: Unable to retrieve quota_set for tenant %s' % (args.tenant) 
    	sys.exit(STATE_CRITICAL)
- 
-   if args.req_count: 
-   	print "OK: Retrieved %d images, required %d" % (image_count, int(args.req_count))
    else:
-   	print "OK: Retrieved %d images" % (image_count)
-
+   	print 'OK: Tenant %s has quota of %d volumes' % (args.tenant, number_of_volumes)
 
 except Exception as e:
-   print e
-   print 'CRITICAL: Failed to retrieve images for tenant %s and user %s' % (args.tenant, args.username) 
+   print 'CRITICAL:Unable to retrieve quota set for tenant %s' % (args.tenant)
    sys.exit(STATE_CRITICAL)
 
 sys.exit(STATE_OK)
