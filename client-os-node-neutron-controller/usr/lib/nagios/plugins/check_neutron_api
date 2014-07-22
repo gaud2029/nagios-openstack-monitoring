@@ -1,0 +1,108 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+#
+# Neutron API monitoring script for Nagios
+#
+# Authors:
+#   Rakesh Patnaik <rakesh.patnaik9@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Requirments: python-keystoneclient, python-argparse, python
+
+import sys
+import argparse
+import requests
+
+STATE_OK = 0
+STATE_WARNING = 1
+STATE_CRITICAL = 2
+STATE_UNKNOWN = 3
+
+
+parser = argparse.ArgumentParser(description='Check OpenStack Neutron API availability.')
+parser.add_argument('--auth_url', metavar='URL', type=str,
+                    required=True,
+                    help='Keystone URL')
+parser.add_argument('--username', metavar='username', type=str,
+                    required=True,
+                    help='username to use for authentication')
+parser.add_argument('--password', metavar='password', type=str,
+                    required=True,
+                    help='password to use for authentication')
+parser.add_argument('--tenant', metavar='tenant', type=str,
+                    required=True,
+                    help='tenant name to use for authentication')
+parser.add_argument('--req_count', metavar='numberNetworks', type=str,
+                    required=False,
+                    help='minimum number of networks in neutron')
+args = parser.parse_args()
+
+headers = {'content-type': 'application/json'}
+
+auth_token = None
+
+neutron_url = None 
+
+tenant_id = None
+
+try:
+
+    auth_request = '{"auth":{"tenantName": "' + args.tenant + '", "passwordCredentials": {"username": "' +  args.username + '", "password": "' + args.password + '"}}}'
+
+    auth_response = requests.post(args.auth_url + '/tokens', data=auth_request, headers=headers).json();
+
+    if not auth_response['access']['token']['id']:
+        raise Exception("Authentication failed. Failed to get an auth token.")
+
+    auth_token = auth_response['access']['token']['id']
+
+    tenant_id = auth_response['access']['token']['tenant']['id']
+	
+    services = auth_response['access']['serviceCatalog']
+
+    for service in services:
+    	if service['type'] == 'network':
+    		neutron_url = service['endpoints'][0]['publicURL']
+    
+    if neutron_url is None:
+    	raise Exception("Authentication succeeded but unable to find network service")
+
+except Exception as e:
+    print 'WARNING: Athentication failed for tenant %s and user %s' % (args.tenant, args.username) 
+    sys.exit(STATE_WARNING)
+
+headers['X-Auth-Token'] = auth_token  
+
+try:
+   neutron_networks_response = requests.get(neutron_url + '/v2.0/networks', headers=headers).json()
+   network_count = 0
+   for network in neutron_networks_response['networks']:
+        network_count += 1
+ 
+   if args.req_count and network_count < int(args.req_count):
+        print "CRITICAL: %d networks found less than required %d" % (network_count, int(args.req_count))
+        sys.exit(STATE_CRITICAL)
+
+   if args.req_count:
+        print "OK: Retrieved %d networks, required %d" % (network_count, int(args.req_count))
+   else:
+        print "OK: Retrieved %d networks" % (network_count)
+
+
+except Exception as e:
+   print 'CRITICAL:Unable to retrieve networks for tenant %s' % (args.tenant)
+   sys.exit(STATE_CRITICAL)
+
+sys.exit(STATE_OK)
