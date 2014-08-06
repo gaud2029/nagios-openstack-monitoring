@@ -1,0 +1,89 @@
+#!/bin/bash
+
+PROGNAME=$(basename $0)
+RELEASE="V1.0"
+CLIENT_TYPES=("apigee" "ro")
+
+# ----------------------------------------------------------------------
+#  echo usage data
+# ----------------------------------------------------------------------
+print_usage() {
+    echo ""
+    echo "$PROGNAME $RELEASE - Installation script for CCP Infrastructure Virtual Machines"
+    echo ""
+    echo "Usage: $PROGNAME -h <this host's fqdn>"
+    echo "                     -n <nagios server fqdn>"
+    echo "                     -t <client type. Available types: $CLIENT_TYPES . Defaults to nrds>"
+    echo ""
+    echo ""
+}
+
+
+# ----------------------------------------------------------------------
+#  parse command line options
+# ----------------------------------------------------------------------
+if [ $# -lt 0 ]; then
+    print_usage
+    exit
+fi
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h | --host)
+                shift
+                hostName=$1
+                ;;
+        -n | --nagioshost)
+                shift
+                nagiosHost=$1
+                export nagiosHost_INSTALL=$nagiosHost
+                ;;
+        -t | --clienttype)
+                shift
+                clientType=$1
+                ;;
+        -v | --version)
+                echo $RELEASE
+                exit 0
+                ;;
+        *)  echo "Unknown argument: $1"
+            print_usage
+            exit 0
+            ;;
+    esac
+    shift
+done
+
+# ----------------------------------------------------------------------
+#  make certain we were passed the hostname/ip and the XI hostname/ip
+# ----------------------------------------------------------------------
+if [ -z $hostName ]
+then
+    echo "Error - Must pass this host's fully qualified domain name"
+    print_usage
+    exit 1
+fi
+
+if [ -z $nagiosHost ]
+then
+    echo "Error - Must pass Nagios hostname or ip address"
+    print_usage
+    exit 1
+fi
+
+if [ $(contains "${CLIENT_TYPES[@]}" $clientType) != "y" ]; then
+    echo "Please provide one of the supported client types"
+    print_usage
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+#  download the nrds package for client type and install
+# ----------------------------------------------------------------------
+cd /tmp
+wget -O nrds.tar.gz "http://$nagiosHost/nrdp/?cmd=nrdsgetclient&token=d3rp4n4g10s&configname=$clientType"
+gunzip -c nrds.tar.gz | tar xf -
+cd clients
+sed -i 's/www.my-server.com/'$nagiosHost'/' nrds/nrds.cfg
+sed -i 's/PUT_YOUR_TOKEN_HERE/d3rp4n4g10s/' nrds/nrds.cfg
+./installnrds $hostName 2
