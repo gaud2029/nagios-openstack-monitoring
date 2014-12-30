@@ -82,7 +82,7 @@ except Exception as e:
 headers['X-Auth-Token'] = auth_token  
 
 try:
-   glance_images_list_response = requests.get(glance_url + '/images', headers=headers).json()
+   glance_images_list_response = requests.get(glance_url + '/v2.0/images', headers=headers).json()
    image_count = 0
    for image in glance_images_list_response['images']:
    	image_count += 1
